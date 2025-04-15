@@ -1,7 +1,6 @@
 Imports LabelLibrary
 Public Class XLabel
 
-    'Public M_LBLPro As New LabelProject
     Public M_Label As New LabelProject.Label
 
     Public Sub New()
@@ -29,8 +28,10 @@ Public Class XLabel
 
         M_Label.PrintDoc.DefaultPageSettings = PgSettings
         M_Label.CokluEtiket = False
-        M_Label.EtiketSatÄ±rSayÄ±sÄ± = 1
-        M_Label.EtiketSutunSayÄ±sÄ± = 1
+        M_Label.EtiketSatýrSayýsý = 1
+        M_Label.EtiketSutunSayýsý = 1
+
+        M_Label.PreferredFileFormat = LabelProject.Label.FileFormat.XML
 
         CreateItem("Cizgi_yatay_1", LabelProject.LabelItem.ItemType.Line, 0, 25, 146, 0, "New Item", "", "", LabelProject.LabelItem.BarcodeTypes.Code39, "", "", True, New Font("Arial", 10, FontStyle.Regular), ContentAlignment.TopLeft, Color.Black, 1)
         CreateItem("Cizgi_yatay_2", LabelProject.LabelItem.ItemType.Line, 0, 50, 146, 0, "New Item", "", "", LabelProject.LabelItem.BarcodeTypes.Code39, "", "", True, New Font("Arial", 10, FontStyle.Regular), ContentAlignment.TopLeft, Color.Black, 1)
@@ -90,7 +91,7 @@ Public Class XLabel
         M_Label.PrintPreview()
     End Sub
 
-    Public Sub YazdÄ±r()
+    Public Sub Yazdýr()
         M_Label.PrintDoc.Print()
     End Sub
 
@@ -99,13 +100,13 @@ Public Class XLabel
                    Width As Single, Height As Single,
                    Text As String,
                    Optional DataField As String = vbNullString,
-                   Optional RefAlanlist As String = vbNullString,
+                   Optional RefAlanlist As String = "",
                    Optional BarkodType As LabelProject.LabelItem.BarcodeTypes = LabelProject.LabelItem.BarcodeTypes.Code128,
                    Optional BarkodPrfxChr As String = vbNullString,
                    Optional BarkodVeriAlan As String = vbNullString,
                    Optional BarkodText As Boolean = True,
-                   Optional YazÄ±Tipi As Font = Nothing,
-                   Optional YazÄ±Hiza As ContentAlignment = ContentAlignment.MiddleLeft,
+                   Optional Yazýtipi As Font = Nothing,
+                   Optional YaziHiza As ContentAlignment = ContentAlignment.MiddleLeft,
                    Optional CizgiRengi As Color = Nothing,
                    Optional CizgiK As Single = 1,
                    Optional Resim As Image = Nothing)
@@ -128,19 +129,20 @@ Public Class XLabel
             .DataField = DataField
             .BarcodePrefixChar = BarkodPrfxChr
             .BarcodeType = BarkodType
-            .BarkodVeriAlanÄ± = BarkodVeriAlan
-            .RefAlanListesi = RefAlanlist
+            .BarkodVeriAlaný = BarkodVeriAlan
+            .RefAlanListesi = RefAlanlist ' .Split(","c).ToList()
             .BarcodeText = BarkodText
-            If IsNothing(YazÄ±Tipi) Then
+            If IsNothing(Yazýtipi) Then
                 .MyFont = New Font("Arial", 10)
             Else
-                .MyFont = YazÄ±Tipi
+                .MyFont = Yazýtipi
             End If
-            .TextAlign = YazÄ±Hiza
+            .TextAlign = YaziHiza
             .Image = Resim
         End With
 
         M_Label.Add(Item)
 
     End Sub
+
 End Class

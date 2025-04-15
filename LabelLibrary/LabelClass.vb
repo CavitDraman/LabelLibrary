@@ -12,19 +12,51 @@ Imports System.IO.Compression
 Public Class LabelProject
     Shared ItemCount As Integer = 0
     Const mm As Single = 3.937
+    Const DefaultFontSize As Integer = 10
+    Const DefaultMargin As Integer = 39
+    Const DashLineWidth As Single = 1
+    Const DefaultLineWidth As Single = 1
+    Const DefaultBarcodeHeight As Integer = 100
+    Const DefaultBarcodeWidth As Integer = 100
 
     Public Class Label
         Implements IEnumerable, IEnumerator
 
-        Private List As New System.Collections.Specialized.OrderedDictionary
+        ' Label sınıfı, etiket yazdırma işlemleri için temel işlevselliği sağlar.
+        ' Bu sınıf, etiket öğelerini yönetir ve yazdırma işlemlerini gerçekleştirir.
+
+        ' Etiket öğelerini tutan bir sözlük.
+        Private List As New System.Collections.Specialized.OrderedDictionary 'önceki versiyon
+        'Private List As New Dictionary(Of String, LabelItem)
+
+        ' Yazdırma işlemi sırasında kullanılan pozisyon.
         Private Position As Integer = -1
+
+
+        ' Yazdırma belgesi ve sayfa ayarları için kullanılan nesneler.
         Private WithEvents mPrintDoc As New Printing.PrintDocument
         Private WithEvents mPageSetupDialog As New PageSetupDialog With {.Document = mPrintDoc, .EnableMetric = True}
 
+        Private _printDocument As IPrintDocument = New PrintDocumentWrapper(mPrintDoc)
+
+        ' Çoklu etiket yazdırma işlemi için kullanılan bayraklar ve sayaçlar.
         Private PrintAllPage As Boolean = False
         Private PrintPageNum As Integer = 0
         Private PrintLabelNum As Integer = 0
+
+
+        ' Seçili etiket öğesi.
         Private mSelectedItm As LabelItem
+
+        ' Log dosyasının konumu. Varsayılan olarak uygulama ile aynı klasörde.
+        Private _logFilePath As String = IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ErrorLog.txt")
+
+        ' Kullanıcıya JSON veya XML formatında okuma/yazma seçeneği sunmak için bir özellik.
+        Public Enum FileFormat
+            XML
+            JSON
+        End Enum
+        Public Property PreferredFileFormat As FileFormat = FileFormat.XML
 
 #Region "Properties"
 
@@ -78,9 +110,21 @@ Public Class LabelProject
         End Property
 
         Public ReadOnly Property Current() As Object Implements System.Collections.IEnumerator.Current
+
             Get
-                Return CType(List(Position), LabelItem)
+                If List.Count > 0 Then
+                    If Position >= 0 AndAlso Position < List.Count Then
+                        'Dim keyAtPosition As String = List.Keys.ElementAt(Position)
+                        'Return List(keyAtPosition)
+                        Return CType(List(Position), LabelItem)
+                    Else
+                        Return Nothing
+                    End If
+                Else
+                    Return Nothing
+                End If
             End Get
+
         End Property
 
         Public Property ParameterTable As New ParameterTableClass
@@ -105,10 +149,18 @@ Public Class LabelProject
             End Try
         End Sub
 
+        Private Sub AddItemToList(item As LabelItem)
+            Try
+                List.Add(item.Name, item)
+            Catch ex As Exception
+                HandleError("Error adding item to list.", ex)
+            End Try
+        End Sub
+
         Public Sub AddText(Txt As String,
                            x As Single, y As Single,
                            W As Single, H As Single,
-                           Optional FSize As Integer = 10,
+                           Optional FSize As Integer = DefaultFontSize,
                            Optional FBold As Boolean = True,
                            Optional FItalik As Boolean = False,
                            Optional Box As Boolean = False,
@@ -132,61 +184,47 @@ Public Class LabelProject
                 .TextAlign = Hiza
             End With
 
-            Try
-                List.Add(NewItm.Name, NewItm)
-            Catch ex As Exception
-                RaiseEvent ErrorEvent(ex.Message)
-            End Try
+            AddItemToList(NewItm)
 
-
-            If Box Then AddBox(x, y, W, H, Color.Black, 1)
-
+            If Box Then AddBox(x, y, W, H, Color.Black, DefaultLineWidth)
         End Sub
 
         Public Sub AddBox(x As Single, y As Single,
                            W As Single, H As Single,
                            Renk As Color,
-                           Optional LineW As Single = 1,
+                           Optional LineW As Single = DefaultLineWidth,
                           Optional ItemName As String = vbNullString)
 
             Dim NewItm As New LabelItem(LabelItem.ItemType.Box, ItemName)
             With NewItm
                 .LineWidth = LineW
-                .LineColor = Renk 'Color.Black
+                .LineColor = Renk
                 .x1 = x
                 .y1 = y
                 .Width = W
                 .Height = H
             End With
-            Try
-                List.Add(NewItm.Name, NewItm)
-            Catch ex As Exception
-                RaiseEvent ErrorEvent(ex.Message)
-            End Try
 
+            AddItemToList(NewItm)
         End Sub
 
         Public Sub AddLine(x As Single, y As Single,
                            W As Single, H As Single,
                            Renk As Color,
-                           Optional LineW As Single = 1,
+                           Optional LineW As Single = DefaultLineWidth,
                            Optional ItemName As String = vbNullString)
 
             Dim NewItm As New LabelItem(LabelItem.ItemType.Line, ItemName)
             With NewItm
                 .LineWidth = LineW
-                .LineColor = Renk 'Color.Black
+                .LineColor = Renk
                 .x1 = x
                 .y1 = y
                 .Width = W
                 .Height = H
             End With
-            Try
-                List.Add(NewItm.Name, NewItm)
-            Catch ex As Exception
-                RaiseEvent ErrorEvent(ex.Message)
-            End Try
 
+            AddItemToList(NewItm)
         End Sub
 
         Public Sub AddImage(Img As Image,
@@ -202,14 +240,10 @@ Public Class LabelProject
                 .Width = W
                 .Height = H
             End With
-            Try
-                List.Add(NewItm.Name, NewItm)
-            Catch ex As Exception
-                RaiseEvent ErrorEvent(ex.Message)
-            End Try
 
+            AddItemToList(NewItm)
 
-            If Box Then AddBox(x, y, W, H, Color.Black, 1)
+            If Box Then AddBox(x, y, W, H, Color.Black, DefaultLineWidth)
         End Sub
 
         Public Sub AddBarcode(Txt As String,
@@ -228,12 +262,8 @@ Public Class LabelProject
                 .BarcodeType = Barcodetype
                 .Height = H
             End With
-            Try
-                List.Add(NewItm.Name, NewItm)
-            Catch ex As Exception
-                RaiseEvent ErrorEvent(ex.Message)
-            End Try
 
+            AddItemToList(NewItm)
         End Sub
 
         Public Sub Remove(ByVal Key As String)
@@ -252,7 +282,14 @@ Public Class LabelProject
         End Sub
 
         Public Sub Remove(ByVal Index As Integer)
-            List.RemoveAt(Index)
+            ' Dictionary'de RemoveAt metodu olmadığından, Index'e karşılık gelen anahtarı bulup Remove metodunu kullanıyoruz.
+            If Index >= 0 AndAlso Index < List.Count Then
+                'Dim keyToRemove = List.Keys.ElementAt(Index)
+                'List.Remove(keyToRemove)
+                List.RemoveAt(Index)
+            Else
+                Throw New ArgumentOutOfRangeException("Index", "Index is out of range.")
+            End If
         End Sub
 
         Public Sub Clear()
@@ -279,19 +316,44 @@ Public Class LabelProject
             Return CType(Me, IEnumerator)
         End Function
 
-        Public Sub PrintAll()
+        Public Interface IPrintDocument
+            Sub Print()
+            Function GetDefaultPageSettings() As PageSettings
+        End Interface
 
+        Public Class PrintDocumentWrapper
+            Implements IPrintDocument
+
+            Private ReadOnly _printDocument As PrintDocument
+
+            Public Sub New(printDocument As PrintDocument)
+                _printDocument = printDocument
+            End Sub
+
+            Public Sub Print() Implements IPrintDocument.Print
+                _printDocument.Print()
+            End Sub
+
+            Public Function GetDefaultPageSettings() As PageSettings Implements IPrintDocument.GetDefaultPageSettings
+                Return _printDocument.DefaultPageSettings
+            End Function
+        End Class
+
+        Public Sub SetPrintDocument(printDocument As IPrintDocument)
+            _printDocument = printDocument
+        End Sub
+
+        Public Sub PrintAll()
             If PrintDlg.ShowDialog = DialogResult.OK Then
                 PrintAllPage = True
                 PrintPageNum = 0
                 PrintLabelNum = 0
 
-                PrintDoc.Print()
+                _printDocument.Print()
 
                 PrintAllPage = False
                 PrintPageNum = 0
             End If
-
         End Sub
 
         Public Sub PrintPreview()
@@ -312,11 +374,10 @@ Public Class LabelProject
 
         Public Sub SetBirlesikAlanlar()
             For Each Itm As LabelItem In Me
-                If Itm.Type = LabelItem.ItemType.Text AndAlso Itm.RefAlanListesi.Length > 0 Then
-                    Dim Refs() As String = Split(Itm.RefAlanListesi, ";")
+                If Itm.Type = LabelItem.ItemType.Text AndAlso Itm.RefAlanListesi.Count > 0 Then
                     Itm.Text = ""
 
-                    For Each Rf As String In Refs
+                    For Each Rf As String In Itm.RefAlanListesi
 
                         ' çift tırnak kontrolü
                         If Rf.StartsWith(ControlChars.Quote) And Rf.EndsWith(ControlChars.Quote) Then
@@ -336,90 +397,120 @@ Public Class LabelProject
             Next
         End Sub
 
-        Private Sub mPrintDoc_PrintPage(sender As Object, e As Printing.PrintPageEventArgs) Handles mPrintDoc.PrintPage
-            Dim SatırArası, SutunArası As Single
-            Dim Stn, Str As Integer
-
-            'Margins 
+        ' Yazdırma işlemi sırasında kenar boşluklarını çizen metot.
+        Private Sub DrawMarginsx(e As Printing.PrintPageEventArgs)
             Dim MarginPen As New Pen(Brushes.Blue) With {.DashStyle = Drawing2D.DashStyle.Dash}
-            With e.Graphics
-                If DrawMargins Then .DrawRectangle(MarginPen, e.MarginBounds)
-            End With
+            If DrawMargins Then
+                e.Graphics.DrawRectangle(MarginPen, e.MarginBounds)
+            End If
+        End Sub
 
+        ' Çoklu etiket yazdırma işlemi için ızgara çizgilerini çizen metot.
+        Private Sub DrawGrid(e As Printing.PrintPageEventArgs)
             If CokluEtiket Then
-
                 Dim MyPen As New Pen(Brushes.Black) With {.DashStyle = Drawing2D.DashStyle.DashDot}
 
+                ' Satır çizgilerini çiz.
                 If EtiketSatırSayısı > 1 Then
-                    SatırArası = e.MarginBounds.Height / EtiketSatırSayısı
+                    Dim SatırArası = e.MarginBounds.Height / EtiketSatırSayısı
                     For i As Single = 1 To EtiketSatırSayısı - 1
-                        e.Graphics.DrawLine(MyPen, e.MarginBounds.Left, SatırArası * i + e.MarginBounds.Top, e.MarginBounds.Width + e.MarginBounds.Left, SatırArası * i + e.MarginBounds.Top)
+                        e.Graphics.DrawLine(MyPen,
+                                            CSng(e.MarginBounds.Left),
+                                            CSng(SatırArası * i + e.MarginBounds.Top),
+                                            CSng(e.MarginBounds.Width + e.MarginBounds.Left),
+                                            CSng(SatırArası * i + e.MarginBounds.Top))
                     Next
                 End If
+
+                ' Sütun çizgilerini çiz.
                 If EtiketSutunSayısı > 1 Then
-                    SutunArası = e.MarginBounds.Width / EtiketSutunSayısı
+                    Dim SutunArası = e.MarginBounds.Width / EtiketSutunSayısı
                     For i As Single = 1 To EtiketSutunSayısı - 1
-                        e.Graphics.DrawLine(MyPen, SutunArası * i + e.MarginBounds.Left, e.MarginBounds.Top, SutunArası * i + e.MarginBounds.Left, e.MarginBounds.Height + e.MarginBounds.Top)
+                        e.Graphics.DrawLine(MyPen,
+                                            CSng(SutunArası * i + e.MarginBounds.Left),
+                                            CSng(e.MarginBounds.Top),
+                                            CSng(SutunArası * i + e.MarginBounds.Left),
+                                            CSng(e.MarginBounds.Height + e.MarginBounds.Top))
                     Next
                 End If
             End If
+        End Sub
 
-            If PrintAllPage Then
-                Dim Row As DataRow
+        ' Etiketleri yazdıran metot.
+        Private Sub PrintLabels(e As Printing.PrintPageEventArgs)
+            Dim SatırArası = e.MarginBounds.Height / EtiketSatırSayısı
+            Dim SutunArası = e.MarginBounds.Width / EtiketSutunSayısı
 
-                For Str = 1 To EtiketSatırSayısı
-                    For Stn = 1 To EtiketSutunSayısı
-                        PrintLabelNum += 1
+            Dim Row As DataRow
 
-                        If MyDataTable.Rows.Count > 0 Then
-                            Row = MyDataTable.Rows(PrintLabelNum - 1)
+            ' Satır ve sütun döngüsü ile etiketleri yazdır.
+            For Strx = 1 To EtiketSatırSayısı
+                For Stn = 1 To EtiketSutunSayısı
+                    PrintLabelNum += 1
 
-                            For Each Itm As LabelProject.LabelItem In Me
-
-                                If Itm.Type = LabelProject.LabelItem.ItemType.Text Or
-                                    Itm.Type = LabelProject.LabelItem.ItemType.Barcode Then
-
-                                    If Itm.DataField.Length > 0 Then
-                                        If IsDBNull(Row(Itm.DataField)) Then
-                                            Itm.Text = ""
-                                        Else
-                                            Itm.Text = Row(Itm.DataField)
-                                        End If
-                                    End If
-
-                                End If
-                            Next
-                        End If
-
-                        SetBirlesikAlanlar()
-                        SetBarkodText()
+                    ' Veri tablosundan veri al ve etiketlere uygula.
+                    If MyDataTable.Rows.Count > 0 Then
+                        Row = MyDataTable.Rows(PrintLabelNum - 1)
 
                         For Each Itm As LabelProject.LabelItem In Me
-                            Itm.Yazdır(e.Graphics, (Stn - 1) * SutunArası + e.MarginBounds.Left, (Str - 1) * SatırArası + e.MarginBounds.Top)
+                            If Itm.Type = LabelProject.LabelItem.ItemType.Text Or
+                               Itm.Type = LabelProject.LabelItem.ItemType.Barcode Then
+
+                                If Itm.DataField.ToString.Length > 0 Then
+                                    If IsDBNull(Row(Itm.DataField)) Then
+                                        Itm.Text = ""
+                                    Else
+                                        Itm.Text = Row(Itm.DataField)
+                                    End If
+                                End If
+                            End If
                         Next
+                    End If
 
-                        If PrintLabelNum >= MyDataTable.Rows.Count Then
-                            e.HasMorePages = False
-                            Exit Sub
-                        End If
+                    ' Birleşik alanları ve barkod metinlerini ayarla.
+                    SetBirlesikAlanlar()
+                    SetBarkodText()
+
+                    ' Etiket öğelerini yazdır.
+                    For Each Itm As LabelProject.LabelItem In Me
+                        Itm.Yazdır(e.Graphics, (Stn - 1) * SutunArası + e.MarginBounds.Left, (Strx - 1) * SatırArası + e.MarginBounds.Top)
                     Next
+
+                    ' Tüm etiketler yazdırıldıysa çık.
+                    If PrintLabelNum >= MyDataTable.Rows.Count Then
+                        e.HasMorePages = False
+                        Exit Sub
+                    End If
                 Next
+            Next
 
-                If PrintLabelNum < MyDataTable.Rows.Count Then
-                    e.HasMorePages = True
-                Else
-                    e.HasMorePages = False
-                End If
-
+            ' Daha fazla sayfa olup olmadığını kontrol et.
+            If PrintLabelNum < MyDataTable.Rows.Count Then
+                e.HasMorePages = True
             Else
+                e.HasMorePages = False
+            End If
+        End Sub
 
+        ' Yazdırma işlemini yöneten ana metot.
+        Private Sub mPrintDoc_PrintPage(sender As Object, e As Printing.PrintPageEventArgs) Handles mPrintDoc.PrintPage
+            ' Kenar boşluklarını çiz.
+            DrawMarginsx(e)
+
+            ' Izgara çizgilerini çiz.
+            DrawGrid(e)
+
+            ' Tüm sayfaları yazdır veya yalnızca seçili öğeleri yazdır.
+            If PrintAllPage Then
+                PrintLabels(e)
+            Else
                 SetBirlesikAlanlar()
                 SetBarkodText()
 
                 For Each Itm As LabelProject.LabelItem In Me
                     Itm.Yazdır(e.Graphics, e.MarginBounds.Left, e.MarginBounds.Top)
 
-                    ' seçili öğeyi kırmızı çerçeveye alma 
+                    ' Seçili öğeyi vurgula.
                     If (Not mSelectedItm Is Nothing) AndAlso Itm.Name = mSelectedItm.Name Then
                         e.Graphics.DrawRectangle(New Pen(Color.Red, 1), Itm.x1 * mm - 1 + e.MarginBounds.Left, Itm.y1 * mm - 1 + e.MarginBounds.Top, Itm.Width * mm + 2, Itm.Height * mm + 2)
                     End If
@@ -454,7 +545,7 @@ Public Class LabelProject
             Return True
         End Function
 
-#Region " XML Oku - Yaz"
+#Region " XML / JSON Oku - Yaz"
 
         Public Sub WriteXML(File As String)
 
@@ -530,7 +621,7 @@ Public Class LabelProject
                             .WriteAttributeString("LineWidth", Itm.LineWidth.ToString)
                             .WriteAttributeString("DataField", Itm.DataField)
                             .WriteAttributeString("BarkodVeriAlanı", Itm.BarkodVeriAlanı)
-                            .WriteAttributeString("RefAlanListesi", Itm.RefAlanListesi)
+                            .WriteAttributeString("RefAlanListesi", String.Join(";", Itm.RefAlanListesi))
 
                             .WriteStartElement("Font")
                             .WriteAttributeString("FontName", Itm.MyFont.Name)
@@ -677,9 +768,87 @@ Public Class LabelProject
             End Try
         End Sub
 
+        Public Sub WriteXMLModern(File As String)
+            Try
+                Dim serializer As New Xml.Serialization.XmlSerializer(GetType(Label))
+                Using writer As New StreamWriter(File)
+                    serializer.Serialize(writer, Me)
+                End Using
+                MessageBox.Show(File & " XML Dosyası Kaydedildi", "Dosya Kayıt", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Catch ex As Exception
+                HandleError("XML Write Error", ex)
+            End Try
+        End Sub
+
+        Public Sub ReadXMLModern(File As String)
+            Try
+                If IO.File.Exists(File) Then
+                    Dim serializer As New Xml.Serialization.XmlSerializer(GetType(Label))
+                    Using reader As New StreamReader(File)
+                        Dim deserializedLabel As Label = CType(serializer.Deserialize(reader), Label)
+                        Me.List = deserializedLabel.List
+                        Me.MyDataTable = deserializedLabel.MyDataTable
+                        ' Diğer özellikler de burada kopyalanabilir.
+                    End Using
+                Else
+                    MessageBox.Show("The filename you selected was not found.")
+                End If
+            Catch ex As Exception
+                HandleError("XML Read Error", ex)
+            End Try
+        End Sub
+
+        ' JSON yazma metodu.
+        Public Sub WriteJSON(File As String)
+            Try
+                Dim json As String = Newtonsoft.Json.JsonConvert.SerializeObject(Me, Newtonsoft.Json.Formatting.Indented)
+                IO.File.WriteAllText(File, json)
+                MessageBox.Show(File & " JSON Dosyası Kaydedildi", "Dosya Kayıt", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Catch ex As Exception
+                HandleError("JSON Write Error", ex)
+            End Try
+        End Sub
+
+        ' JSON okuma metodu.
+        Public Sub ReadJSON(File As String)
+            Try
+                If IO.File.Exists(File) Then
+                    Dim json As String = IO.File.ReadAllText(File)
+                    Dim deserializedLabel As Label = Newtonsoft.Json.JsonConvert.DeserializeObject(Of Label)(json)
+                    Me.List = deserializedLabel.List
+                    Me.MyDataTable = deserializedLabel.MyDataTable
+                    ' Diğer özellikler de burada kopyalanabilir.
+                Else
+                    MessageBox.Show("The filename you selected was not found.")
+                End If
+            Catch ex As Exception
+                HandleError("JSON Read Error", ex)
+            End Try
+        End Sub
+
+        ' Format seçimine göre yazma işlemi.
+        Public Sub WriteToFile(File As String)
+            Select Case PreferredFileFormat
+                Case FileFormat.XML
+                    WriteXML(File)
+                Case FileFormat.JSON
+                    WriteJSON(File)
+            End Select
+        End Sub
+
+        ' Format seçimine göre okuma işlemi.
+        Public Sub ReadFromFile(File As String)
+            Select Case PreferredFileFormat
+                Case FileFormat.XML
+                    ReadXML(File)
+                Case FileFormat.JSON
+                    ReadJSON(File)
+            End Select
+        End Sub
+
         Private Function ReadFontXml(FontXml As XmlReader) As Font
             Dim FontName As String = "Arial"
-            Dim FontSize As Integer = 10
+            Dim FontSize As Integer = DefaultFontSize
             Dim Bold As Boolean = False
             Dim Italik As Boolean = False
 
@@ -797,7 +966,7 @@ Public Class LabelProject
                         Case "BarkodVeriAlanı"
                             Itm.BarkodVeriAlanı = LblXml.Value
                         Case "RefAlanListesi"
-                            Itm.RefAlanListesi = LblXml.Value
+                            Itm.RefAlanListesi = LblXml.Value  'LblXml.Value.Split(";"c).ToList()
                     End Select
                 End While
             End If
@@ -908,35 +1077,6 @@ Public Class LabelProject
             Return img
         End Function
 
-        'Örnek Kod
-        '    Public Shared Sub Base64EncodeImageFile()
-        '
-        '        Dim bufferSize As Integer = 1000
-        '        Dim buffer(bufferSize) As Byte
-        '        Dim readBytes As Integer = 0
-        '
-        '        Using writer As XmlWriter = XmlWriter.Create("output.xml")
-        '
-        '            Dim inputFile As New FileStream("C:\artFiles\sunset.jpg", FileMode.OpenOrCreate, FileAccess.Read, FileShare.Read)
-        '            writer.WriteStartDocument()
-        '            writer.WriteStartElement("image")
-        '
-        '            Dim br As New BinaryReader(inputFile)
-        '            'Console.WriteLine(vbCr + vbLf + "Writing Base64 data...")
-        '
-        '            Do
-        '                readBytes = br.Read(buffer, 0, bufferSize)
-        '                writer.WriteBase64(buffer, 0, readBytes)
-        '            Loop While bufferSize <= readBytes
-        '            br.Close()
-        '
-        '            writer.WriteEndElement() ' </image>
-        '            writer.WriteEndDocument()
-        '
-        '        End Using
-
-        ' End Sub 'Base64EncodeImageFile
-
 #End Region
 
 #Region "Read-Write PaperSettings to Registry"
@@ -964,7 +1104,7 @@ Public Class LabelProject
                 DefPS = New PageSettings With
                     {.PaperSize = New PaperSize With {.PaperName = "A4", .RawKind = 9},
                     .Landscape = False,
-                    .Margins = New Margins With {.Top = 39, .Bottom = 39, .Left = 39, .Right = 39}
+                    .Margins = New Margins With {.Top = DefaultMargin, .Bottom = DefaultMargin, .Left = DefaultMargin, .Right = DefaultMargin}
                 }
             End If
 
@@ -1025,6 +1165,55 @@ Public Class LabelProject
 
 #End Region
 
+        Public Interface IUserNotifier
+            Sub Notify(message As String, title As String, icon As MessageBoxIcon)
+        End Interface
+
+        Public Class UserNotifier
+            Implements IUserNotifier
+
+            Public Sub Notify(message As String, title As String, icon As MessageBoxIcon) Implements IUserNotifier.Notify
+                MessageBox.Show(message, title, MessageBoxButtons.OK, icon)
+            End Sub
+        End Class
+
+        Private _notifier As IUserNotifier = New UserNotifier()
+
+        Public Sub SetNotifier(notifier As IUserNotifier)
+            _notifier = notifier
+        End Sub
+
+        ' Log dosyasının konumunu ayarlamak için bir özellik.
+        Public Property LogFilePath As String
+            Get
+                Return _logFilePath
+            End Get
+            Set(value As String)
+                If Not String.IsNullOrWhiteSpace(value) Then
+                    _logFilePath = value
+                End If
+            End Set
+        End Property
+
+        Private Sub LogError(message As String, Optional ex As Exception = Nothing)
+            Dim logMessage As String = $"[{DateTime.Now}] {message}"
+            If ex IsNot Nothing Then
+                logMessage &= $" - Exception: {ex.Message}"
+            End If
+
+            Try
+                IO.File.AppendAllText(_logFilePath, logMessage & Environment.NewLine)
+            Catch ioEx As Exception
+                ' Eğer loglama başarısız olursa, kullanıcıya bir hata mesajı göster.
+                MessageBox.Show("Error logging failed: " & ioEx.Message, "Logging Error", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            End Try
+        End Sub
+
+        Private Sub HandleError(message As String, Optional ex As Exception = Nothing)
+            LogError(message, ex)
+            _notifier.Notify(message, "Error", MessageBoxIcon.Error)
+        End Sub
+
         Public Class ParameterTableClass
             Inherits DataTable
 
@@ -1056,6 +1245,13 @@ Public Class LabelProject
             DATA_MATRIX
         End Enum
 
+        Public Enum DataFieldType
+            Text
+            Number
+            Date_
+            Boolean_
+        End Enum
+
 #Region " Properties"
         Public ItemNumber As Integer
 
@@ -1070,10 +1266,10 @@ Public Class LabelProject
 
         '<TypeConverter(GetType(DataFieldList)), CategoryAttribute("Data"), DescriptionAttribute("Nesne Data alanı")> _
         <CategoryAttribute("Data"), DescriptionAttribute("Nesne Data alanı")>
-        Public Property DataField As String = ""
+        Public Property DataField As String = ""  'DataFieldType = DataFieldType.Text
 
         <Category("Data"), Description("Birleştirilecek alanların listesi")>
-        Public Property RefAlanListesi As String = ""
+        Public Property RefAlanListesi As String = ""  'List(Of String) = New List(Of String)()
 
         <CategoryAttribute("Yer"), Description("Nesne Sol üst köşe X koordinatı")>
         Public Property x1 As Single = 10
@@ -1091,14 +1287,14 @@ Public Class LabelProject
         Public Property BarcodePrefixChar As String = ""
 
         <CategoryAttribute("Text"), Description("Nesne yazı fontu")>
-        Public Property MyFont As Font = New Font("Arial", 10)
+        Public Property MyFont As Font = New Font("Arial", DefaultFontSize)
 
         <CategoryAttribute("Text"), Description("Yazı hizalama şekli")>
         Public Property TextAlign As ContentAlignment = ContentAlignment.TopLeft
 
         <CategoryAttribute("Çizgi"), Description("Nesne çizgi rengi")>
         Public Property LineColor As Color = Color.Black
-        <CategoryAttribute("Çizgi"), Description("Nesne çizgi kalınlığı")> Public Property LineWidth As Single = 1
+        <CategoryAttribute("Çizgi"), Description("Nesne çizgi kalınlığı")> Public Property LineWidth As Single = DefaultLineWidth
         <CategoryAttribute("Barkod"), Description("Barkod Tipi")> Public Property BarcodeType As BarcodeTypes
 
         '<TypeConverter(GetType(VeriFieldList)),
@@ -1214,6 +1410,7 @@ Public Class LabelProject
 
                     Try
                         BCode.Format = ZXing.BarcodeFormat.CODE_128
+                        'BCode.Options.Height = DefaultBarcodeHeight * mm
                         BCode.Options.Height = Height * mm
                         BCode.Options.PureBarcode = BarcodeText
                         Img = BCode.Write(TmpText)
@@ -1225,6 +1422,7 @@ Public Class LabelProject
 
                     Try
                         BCode.Format = ZXing.BarcodeFormat.CODE_39
+                        'BCode.Options.Height = DefaultBarcodeHeight * mm
                         BCode.Options.Height = Height * mm
                         BCode.Options.PureBarcode = BarcodeText
                         Img = BCode.Write(TmpText)
@@ -1236,8 +1434,11 @@ Public Class LabelProject
                     Try
                         BCode.Format = ZXing.BarcodeFormat.EAN_13
 
+                        'BCode.Options.Height = DefaultBarcodeHeight * mm
+                        'BCode.Options.Width = DefaultBarcodeWidth * mm
                         BCode.Options.Height = Height * mm
                         BCode.Options.Width = Width * mm
+
                         BCode.Options.PureBarcode = BarcodeText
                         If (TmpText).Length = 12 Then
                             Img = BCode.Write(TmpText)
@@ -1254,8 +1455,11 @@ Public Class LabelProject
                 Case BarcodeTypes.QR
                     Try
                         BCode.Format = ZXing.BarcodeFormat.QR_CODE
+                        'BCode.Options.Height = DefaultBarcodeHeight * mm
+                        'BCode.Options.Width = DefaultBarcodeWidth * mm
                         BCode.Options.Height = Height * mm
                         BCode.Options.Width = Width * mm
+
                         Img = BCode.Write(TmpText)
                     Catch ex As Exception
                         Img = Nothing
@@ -1264,6 +1468,8 @@ Public Class LabelProject
                 Case BarcodeTypes.DATA_MATRIX
                     Try
                         BCode.Format = ZXing.BarcodeFormat.DATA_MATRIX
+                        'BCode.Options.Height = DefaultBarcodeHeight * mm
+                        'BCode.Options.Width = DefaultBarcodeWidth * mm
                         BCode.Options.Height = Height * mm
                         BCode.Options.Width = Width * mm
                         Img = BCode.Write(TmpText)
@@ -1299,6 +1505,27 @@ Public Class LabelProject
         Private Sub DrawImage(X0 As Single, Y0 As Single)
             Dim Img As Image = Me.Image
             If Not IsNothing(Img) Then Grf.DrawImage(Img, x1 * mm + X0, y1 * mm + Y0, Width * mm, Height * mm)
+        End Sub
+
+        Private Sub DisposeGraphicsResources()
+            If Grf IsNot Nothing Then
+                Grf.Dispose()
+                Grf = Nothing
+            End If
+        End Sub
+
+        Private Sub DisposeDrawingResources()
+            ' Dispose pens, brushes, and other GDI+ objects if necessary
+            ' Example:
+            ' If MyPen IsNot Nothing Then
+            '     MyPen.Dispose()
+            '     MyPen = Nothing
+            ' End If
+        End Sub
+
+        Public Sub CleanUp()
+            DisposeGraphicsResources()
+            DisposeDrawingResources()
         End Sub
 #End Region
 

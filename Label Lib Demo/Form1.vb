@@ -1,10 +1,11 @@
-﻿Imports LabelLibrary
+﻿Imports System.Drawing.Printing
+Imports LabelLibrary
 Public Class Form1
     Private MLblb As New XLabel
 
     Private Sub Form1_Load(sender As Object, e As EventArgs) Handles MyBase.Load
 
-        For Each Itm As LabelLibrary.LabelProject.LabelItem In MLblb.M_Label
+        For Each Itm As LabelProject.LabelItem In MLblb.M_Label
             ListBox1.Items.Add(Itm.Name)
         Next
 

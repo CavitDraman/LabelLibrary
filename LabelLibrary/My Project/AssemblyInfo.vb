@@ -8,11 +8,11 @@ Imports System.Runtime.InteropServices
 
 ' Review the values of the assembly attributes
 
-<Assembly: AssemblyTitle("LabelLibrary")> 
-<Assembly: AssemblyDescription("")> 
-<Assembly: AssemblyCompany("")> 
-<Assembly: AssemblyProduct("LabelLibrary")> 
-<Assembly: AssemblyCopyright("Copyright ©  2014")> 
+<Assembly: AssemblyTitle("LabelLibrary")>
+<Assembly: AssemblyDescription("Etiket tasarımı için pratik bir yol.")>
+<Assembly: AssemblyCompany("Cavit Dıraman")>
+<Assembly: AssemblyProduct("LabelLibrary")>
+<Assembly: AssemblyCopyright("Cavit Dıraman  ©  2024")>
 <Assembly: AssemblyTrademark("")> 
 
 <Assembly: ComVisible(False)>
